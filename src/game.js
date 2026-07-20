@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { InputManager } from "./input.js";
 import { loadSettings, saveSettings, loadSavedGame, saveGameState } from "./storage.js";
+import { animateIdleHead, animateCrowdCheer, EAR_SAFE_PHI } from "./idle-life.js"; // idle 生動共用資產(3d-figure-kit)
 
 // —— 速度滑冰 3D(speedskating3d)——fork 自 equestrian3d 騎乘引擎(2026-07-19 拍板 A2)。
 // 賽道:標準速滑橢圓(兩直道+兩個 180° 彎道)——沿用「一切以里程 dist 為域」的閉環範式,
@@ -211,29 +212,39 @@ function makePerson({ suit = 0x2f6f4e, trim = 0xf2e9d8, skin = 0xf3cca6, hair = 
   waist.add(hip);
   rig.add(waist);
 
+  // 頭+臉群組:整顆頭(頭球/耳/帽或髮/眼/瞳/眉/嘴)全收進 headGroup,樞紐=頭中心 T(2.12),
+  // 這樣 idle「偶爾往左看」時整顆頭連臉一起轉(舊版臉直接掛 torso → 只轉頭球臉不跟)。
+  // H(y)=以頭中心為原點的局部座標(= 原立姿 y − 2.12);headGroup 坐在 torso 的 T(2.12),
+  // 故 H(y)+T(2.12) = T(y) → 視覺位置與群組化前逐一相同(位置零位移,只是能整顆轉)。
+  const headGroup = new THREE.Group();
+  headGroup.position.set(0, T(2.12), 0);
+  torso.add(headGroup);
+  const H = (y) => y - 2.12;
+
   const head = new THREE.Mesh(new THREE.SphereGeometry(0.25, 18, 18), skinMat);
-  head.position.y = T(2.12);
-  torso.add(head);
+  head.position.y = H(2.12);
+  headGroup.add(head);
   const earL = new THREE.Mesh(new THREE.SphereGeometry(0.06, 10, 10), skinMat);
   earL.scale.set(0.45, 1, 0.8);
-  earL.position.set(-0.245, T(2.11), 0);
-  torso.add(earL);
+  earL.position.set(-0.245, H(2.11), 0);
+  headGroup.add(earL);
   const earR = earL.clone();
   earR.position.x = 0.245;
-  torso.add(earR);
+  headGroup.add(earR);
 
-  // 連帽(緊身衣同色)或髮
+  // 連帽(緊身衣同色)或髮——★耳前無髮鐵律:帽/髮只坐額頭上緣→頭頂/後腦,兩鬢與耳前留空。
   const capMat = hood ? suitMat : new THREE.MeshStandardMaterial({ color: hair, roughness: 0.85 });
-  const hairCap = new THREE.Mesh(new THREE.SphereGeometry(0.265, 18, 12, 0, Math.PI * 2, 0, Math.PI * 0.46), capMat);
-  hairCap.position.y = T(2.13);
-  hairCap.rotation.x = -0.22;
-  torso.add(hairCap);
+  // 頭頂淺帽:全周向,下緣圈落在額頭上緣(theta 0.32π → 下緣 y≈0.16,高於眉/眼/耳)→ 不碰兩鬢與耳
+  const hairCap = new THREE.Mesh(new THREE.SphereGeometry(0.265, 20, 12, 0, Math.PI * 2, 0, Math.PI * 0.32), capMat);
+  hairCap.position.y = H(2.14);
+  headGroup.add(hairCap);
+  // 後腦/後頸:只披「耳後」半球(phi EAR_SAFE 1.06π~1.94π,兩側前緣一律留在耳朵之後 z<0)→ 耳前無髮
   const hairBack = new THREE.Mesh(
-    new THREE.SphereGeometry(0.255, 16, 8, Math.PI, Math.PI, Math.PI * 0.35, Math.PI * 0.3),
+    new THREE.SphereGeometry(0.258, 16, 12, EAR_SAFE_PHI.start, EAR_SAFE_PHI.end - EAR_SAFE_PHI.start, Math.PI * 0.12, Math.PI * 0.62),
     capMat,
   );
-  hairBack.position.y = T(2.12);
-  torso.add(hairBack);
+  hairBack.position.y = H(2.13);
+  headGroup.add(hairBack);
   if (!hood) {
     void hair;
   }
@@ -241,29 +252,29 @@ function makePerson({ suit = 0x2f6f4e, trim = 0xf2e9d8, skin = 0xf3cca6, hair = 
   const faceDark = new THREE.MeshBasicMaterial({ color: 0x25201a });
   const faceWhite = new THREE.MeshBasicMaterial({ color: 0xffffff });
   const eyeL = new THREE.Mesh(new THREE.SphereGeometry(0.05, 10, 10), faceWhite);
-  eyeL.position.set(-0.09, T(2.18), 0.21);
-  torso.add(eyeL);
+  eyeL.position.set(-0.09, H(2.18), 0.21);
+  headGroup.add(eyeL);
   const eyeR = eyeL.clone();
   eyeR.position.x = 0.09;
-  torso.add(eyeR);
+  headGroup.add(eyeR);
   const pupilL = new THREE.Mesh(new THREE.SphereGeometry(0.025, 8, 8), faceDark);
-  pupilL.position.set(-0.09, T(2.18), 0.25);
-  torso.add(pupilL);
+  pupilL.position.set(-0.09, H(2.18), 0.25);
+  headGroup.add(pupilL);
   const pupilR = pupilL.clone();
   pupilR.position.x = 0.09;
-  torso.add(pupilR);
+  headGroup.add(pupilR);
   const browL = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.02, 0.02), faceDark);
-  browL.position.set(-0.09, T(2.26), 0.22);
+  browL.position.set(-0.09, H(2.26), 0.22);
   browL.rotation.z = 0.16;
-  torso.add(browL);
+  headGroup.add(browL);
   const browR = browL.clone();
   browR.position.x = 0.09;
   browR.rotation.z = -0.16;
-  torso.add(browR);
+  headGroup.add(browR);
   const smile = new THREE.Mesh(new THREE.TorusGeometry(0.07, 0.014, 8, 14, Math.PI), faceDark);
-  smile.position.set(0, T(2.04), 0.21);
+  smile.position.set(0, H(2.04), 0.21);
   smile.rotation.z = Math.PI;
-  torso.add(smile);
+  headGroup.add(smile);
 
   const bootMat = new THREE.MeshStandardMaterial({ color: 0x241c14, roughness: 0.55 });
   const bladeMat = new THREE.MeshStandardMaterial({ color: 0xd6dde4, roughness: 0.25, metalness: 0.7 });
@@ -311,7 +322,7 @@ function makePerson({ suit = 0x2f6f4e, trim = 0xf2e9d8, skin = 0xf3cca6, hair = 
   const rightLeg = mkLeg(0.15);
 
   group.scale.setScalar(scale);
-  return { group, rig, torso, head, waist, leftArm, rightArm, leftLeg, rightLeg, smile };
+  return { group, rig, torso, head, headGroup, waist, leftArm, rightArm, leftLeg, rightLeg, smile };
 }
 
 // 速滑蹲姿基準:前傾+屈膝;動畫在 poseSkater 疊加
@@ -569,6 +580,7 @@ export class SpeedSkatingGame {
 
   buildCrowd() {
     this.crowd = new THREE.Group();
+    this.crowdFigures = []; // 收好每個觀眾人偶 + 決定性相位,供 animateCrowd 每幀驅動(舉手歡呼+左右看)
     const coats = [0xd98a3d, 0x3d78d9, 0xc94f8f, 0x4fae6a, 0xb0552f, 0x8a5ac0];
     for (const side of [-1, 1]) {
       for (let i = 0; i < 7; i += 1) {
@@ -589,17 +601,40 @@ export class SpeedSkatingGame {
         p.group.position.set(-27 + i * 9, 3.4, side * (BEND_R + 8.6));
         p.group.rotation.y = side > 0 ? Math.PI : 0;
         this.crowd.add(p.group);
+        // 相位=座號×0.9 + 對側偏移(決定性!絕不用建構期 Math.random)→ 此起彼落的人浪,不整齊劃一
+        // fig 鍵名=idle-life.js animateCrowdCheer 的契約([{fig,phase,rigY}])
+        this.crowdFigures.push({ fig: p, phase: i * 0.9 + (side > 0 ? 1.7 : 0), rigY: p.rig.position.y });
       }
     }
     this.scene.add(this.crowd);
   }
 
+  // 觀眾生動:每幀驅動——舉手歡呼+頭左右擺看比賽,相位錯開成人浪(邏輯在共用資產 idle-life.js)。
+  animateCrowd() {
+    animateCrowdCheer(this.crowdFigures, this.time);
+  }
+
+  // idle 生動:整顆頭(headGroup)偶爾平滑往選手左手邊瞥一下(0.6 rad)+咧嘴笑(1.4),
+  // 用 racer 自己的相位/週期錯開;邏輯在共用資產 idle-life.js 的 animateIdleHead。
+  animateHead(r) {
+    const f = r && r.figure;
+    if (!f) return;
+    animateIdleHead(f.headGroup, f.smile, this.time, {
+      phase: r.glancePhase || 0,
+      period: r.glancePeriod || 5.4,
+    });
+  }
+
   // ---------- racer 結構(duel-2p-kit §7C:P1/P2/AI 同一套,只差輸入來源) ----------
   mkRacer(figure, lane, label) {
+    const isP1 = label === "P1";
     return {
       figure,
       lane,
       label,
+      // idle 生動:偶爾往左看+微笑的節奏(用 label 錯開相位/週期,兩人不整齊劃一;絕不用建構期 Math.random)
+      glancePhase: isP1 ? 0 : 2.9,
+      glancePeriod: isP1 ? 5.4 : 6.3,
       dist: 0,
       speed: 0,
       strideT: 0,
@@ -1023,6 +1058,9 @@ export class SpeedSkatingGame {
 
     this.poseSkater(this.p1);
     this.poseSkater(this.opp);
+    this.animateHead(this.p1); // idle 生動:偶爾往左看+微笑(P1 與對手都套,錯開相位)
+    this.animateHead(this.opp);
+    this.animateCrowd(); // 觀眾舉手歡呼+左右看(每幀,相位錯開的人浪)
     this.placeRacer(this.p1);
     this.placeRacer(this.opp);
     this.updateCamera(delta);
@@ -1115,6 +1153,7 @@ export class SpeedSkatingGame {
   }
 
   updateCamera(delta) {
+    if (this.freeCam) return; // 驗證用:凍結自動運鏡,讓外部自由擺鏡頭(拍正面臉)
     const r = this.p1;
     const p = ovalPoint(r.dist, r.lane);
     const duel = this.modeId === "duel2p";
