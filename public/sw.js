@@ -1,5 +1,5 @@
 // 網路優先 HTML+快取優先資產(07-13 修復:cache-first 舊 index 會在部署後 404 壞站)
-const CACHE_NAME = "speedskating-nf3"; // nf3:idle 生動(headGroup 群組化選手頭臉+往左看 0.6/微笑 1.4+觀眾舉手歡呼左右看+耳前無髮鐵律,共用 idle-life.js);nf1 速度滑冰 3D 首發(fork 自 equestrian3d)
+const CACHE_NAME = "speedskating-nf4"; // nf3:idle 生動(headGroup 群組化選手頭臉+往左看 0.6/微笑 1.4+觀眾舉手歡呼左右看+耳前無髮鐵律,共用 idle-life.js);nf1 速度滑冰 3D 首發(fork 自 equestrian3d)
 const CORE_ASSETS = ["/", "/index.html", "/manifest.webmanifest", "/icon.svg", "/icon-maskable.svg"];
 
 self.addEventListener("install", (event) => {
